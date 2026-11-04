@@ -15,3 +15,4 @@ deps/include/
 deps/resources/
 deps/.cache/
 deps/aot/.build*/
+Generated/

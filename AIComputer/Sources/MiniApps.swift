@@ -255,76 +255,78 @@ struct SeededRandom {
     }
 }
 
-// MARK: - Terminal (sample commands)
+// MARK: - Terminal (Alpine Linux running on the phone via iSH)
 
 struct TerminalApp: View {
-    struct Line: Identifiable { let id = UUID(); var text: AttributedString }
-    @State private var lines: [Line] = []
+    @ObservedObject private var shell = LinuxShell.shared
     @State private var input = ""
     @FocusState private var focused: Bool
 
-    private let prompt = "matheesha@iphone:~$"
-
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(lines) { line in Text(line.text).frame(maxWidth: .infinity, alignment: .leading) }
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(prompt).foregroundStyle(Theme.term).fontWeight(.semibold)
-                        TextField("", text: $input)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focused)
-                            .tint(Theme.term)
-                            .onSubmit(run)
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let note = statusNote {
+                            Text(note).foregroundStyle(Theme.muted)
+                        }
+                        Text(shell.output)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Color.clear.frame(height: 1).id("bottom")
                     }
-                    .id("input")
+                    .font(Theme.mono)
+                    .foregroundStyle(Color(hex: 0xD7E0DE))
+                    .padding(14)
                 }
-                .font(Theme.mono)
-                .foregroundStyle(Color(hex: 0xD7E0DE))
-                .padding(14)
+                .background(Color(hex: 0x050707))
+                .onTapGesture { focused = true }
+                .onChange(of: shell.output) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .background(Color(hex: 0x050707))
-            .onTapGesture { focused = true }
-            .onChange(of: lines.count) { _, _ in withAnimation { proxy.scrollTo("input", anchor: .bottom) } }
+
+            HStack(spacing: 8) {
+                Text("$").font(Theme.mono).foregroundStyle(Theme.term).fontWeight(.semibold)
+                TextField("", text: $input, prompt: Text("type a command").foregroundColor(Theme.muted))
+                    .font(Theme.mono)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focused)
+                    .tint(Theme.term)
+                    .submitLabel(.send)
+                    .onSubmit(run)
+                Button { shell.send("\u{3}") } label: {
+                    Text("^C").font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 10).frame(height: 32)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.surface2))
+                }
+                .buttonStyle(PressStyle())
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 52)
+            .background(Color(hex: 0x0A0E0F))
         }
         .onAppear {
-            if lines.isEmpty { say("AI Computer terminal (preview). Type help", color: Theme.muted) }
+            shell.startIfNeeded()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { focused = true }
         }
     }
 
-    private func say(_ text: String, color: Color? = nil) {
-        var a = AttributedString(text)
-        if let color { a.foregroundColor = color }
-        lines.append(Line(text: a))
+    private var statusNote: String? {
+        switch shell.status {
+        case .idle, .installing: return "Installing Alpine Linux (first launch only)..."
+        case .booting: return "Starting Linux..."
+        case .running: return nil
+        case .exited(let code): return "Shell exited (code \(code)). Reopen the app to start a new one."
+        case .failed(let message): return message
+        }
     }
 
     private func run() {
-        let cmd = input.trimmingCharacters(in: .whitespaces)
+        let cmd = input
         input = ""
-        var echo = AttributedString(prompt + " ")
-        echo.foregroundColor = Theme.term
-        echo.append(AttributedString(cmd))
-        lines.append(Line(text: echo))
         focused = true
-        guard !cmd.isEmpty else { return }
-        let parts = cmd.split(separator: " ").map(String.init)
-        switch parts[0] {
-        case "help": say("Commands: ls  pwd  whoami  date  agents  models  mcp  neofetch  echo  clear\nPreview: commands return sample output.")
-        case "ls": say("Projects  Documents  Downloads  Pictures  Videos  agent.py  todo.md")
-        case "pwd": say("/home/matheesha")
-        case "whoami": say("matheesha")
-        case "date": say(Date().formatted(date: .complete, time: .standard))
-        case "agents": say("claude-code   working   acp://vps\ncodex         ready     acp://vps\ngemini-cli    ready     acp://vps")
-        case "models": say("* LFM3-1.7B   on-device   active\n  openai      api-key\n  anthropic   api-key")
-        case "mcp": say("github    online\nfs        online\nbrowser   online\ndb        online\nnotion    online")
-        case "neofetch": say("  ✦   matheesha@iphone\n ✦✦✦  OS: AI Computer 0.1 (preview)\n  ✦   Host: iPhone 17 Pro Max\n      Shell: aish · Model: LFM3-1.7B", color: Theme.teal)
-        case "echo": say(parts.dropFirst().joined(separator: " "))
-        case "clear": lines.removeAll()
-        default: say("\(parts[0]): command not found")
-        }
+        if cmd.trimmingCharacters(in: .whitespaces) == "clear" { shell.clearScreen() }
+        shell.send(cmd + "\n")
     }
 }
 

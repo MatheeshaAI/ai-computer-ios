@@ -14,6 +14,10 @@ targets:
     platform: iOS
     sources:
       - AIComputer
+      # Alpine Linux root filesystem (fakefs), staged by .github/actions/ish-engine.
+      - path: Generated/alpine-rootfs
+        type: folder
+        buildPhase: resources
     scheme: {}
     info:
       path: AIComputer/Info.plist
@@ -40,3 +44,13 @@ targets:
         SUPPORTS_MACCATALYST: NO
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
+        # iSH-ARM64 emulator (deps/ish), built by .github/actions/ish-engine.
+        SWIFT_OBJC_BRIDGING_HEADER: AIComputer/Linux/AIComputer-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/deps/include/ish
+        # Must match the defines deps/ish/meson.build used for the libraries.
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) GUEST_ARM64=1 ENGINE_ASBESTOS=1 LOG_HANDLER_NSLOG=1 ISH_JIT=1 ISH_JIT_NO_EMIT=1
+        GCC_C_LANGUAGE_STANDARD: gnu11
+        ISH_LIBS_DIR: $(SRCROOT)/deps/libs
+        "ISH_LIBS_DIR[sdk=iphonesimulator*]": $(SRCROOT)/deps/libs/iphonesimulator
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+        OTHER_LDFLAGS: $(inherited) $(ISH_LIBS_DIR)/libish.a $(ISH_LIBS_DIR)/libish_emu.a $(ISH_LIBS_DIR)/libfakefs.a -force_load $(ISH_LIBS_DIR)/libish_aot.a -lsqlite3

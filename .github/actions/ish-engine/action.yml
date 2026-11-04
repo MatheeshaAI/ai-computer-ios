@@ -1,0 +1,35 @@
+name: iSH engine
+description: >
+  Builds (or restores from cache) the iSH-ARM64 libraries for device and simulator and the
+  Alpine root filesystem, then stages the rootfs at Generated/alpine-rootfs for the app bundle.
+runs:
+  using: composite
+  steps:
+    - name: Engine cache key
+      id: key
+      shell: bash
+      run: echo "sha=$(git rev-parse HEAD:deps/ish)" >> "$GITHUB_OUTPUT"
+    - name: Restore engine
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/libs
+          deps/include
+          deps/resources
+        key: ish-engine-v1-${{ steps.key.outputs.sha }}-${{ hashFiles('deps/*.sh') }}
+    - name: Build engine
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        brew install meson ninja llvm lld libarchive
+        export PKG_CONFIG_PATH="$(brew --prefix libarchive)/lib/pkgconfig:$PKG_CONFIG_PATH"
+        bash deps/build_ish.sh release --all
+        bash deps/prepare_alpine_rootfs.sh
+    - name: Stage Alpine rootfs
+      shell: bash
+      run: |
+        rm -rf Generated && mkdir -p Generated
+        unzip -q deps/resources/alpine-rootfs.zip -d Generated
+        test -f Generated/alpine-rootfs/meta.db
+        ls deps/libs deps/libs/iphonesimulator
