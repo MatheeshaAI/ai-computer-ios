@@ -17,6 +17,10 @@
 
 static LinuxEngine *g_engine;
 
+// Defined in deps/ish/kernel/uname.c. do_uname() strcpy()s the host's name into a 65-byte
+// field, so a long host name (e.g. a CI Mac) overflows; give the guest a fixed short one.
+extern const char *uname_hostname_override;
+
 #pragma mark - Terminal driver (guest output -> app)
 
 static int engine_tty_init(struct tty *tty) { return 0; }
@@ -116,6 +120,7 @@ static void engine_handle_die(const char *msg) {
 
     exit_hook = engine_handle_exit;
     die_handler = engine_handle_die;
+    uname_hostname_override = "aicomputer";
 #if !TARGET_OS_SIMULATOR
     // Guest unix sockets need a short host path inside the sandbox.
     sock_tmp_prefix = strdup([NSTemporaryDirectory() stringByAppendingString:@"ishsock"].UTF8String);
