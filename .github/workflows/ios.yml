@@ -59,6 +59,15 @@ jobs:
           done
           # Give Linux time to install and boot, then capture the real shell.
           shoot -screen home -app terminal; sleep 30; xcrun simctl io "$UDID" screenshot shots/app-terminal-linux.png
+      - name: Collect app log and crash reports
+        if: always()
+        run: |
+          mkdir -p shots/diagnostics
+          xcrun simctl spawn "$UDID" log show --last 15m --style compact \
+            --predicate 'process == "AIComputer"' > shots/diagnostics/app.log 2>&1 || true
+          cp ~/Library/Logs/DiagnosticReports/AIComputer*.ips shots/diagnostics/ 2>/dev/null || true
+          grep -h "LinuxEngine\|LinuxShell" shots/diagnostics/app.log | tail -40 || true
+          ls shots/diagnostics
       - uses: actions/upload-artifact@v4
         if: always()
         with:
