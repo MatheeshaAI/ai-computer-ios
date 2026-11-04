@@ -21,7 +21,7 @@ jobs:
           xcode-version: latest-stable
       - name: Install build tools
         run: |
-          brew install meson ninja llvm libarchive
+          brew install meson ninja llvm lld libarchive
           echo "PKG_CONFIG_PATH=$(brew --prefix libarchive)/lib/pkgconfig:$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
       - name: Build iSH libraries (iPhone, arm64)
         run: bash deps/build_ish.sh release
