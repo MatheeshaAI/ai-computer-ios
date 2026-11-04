@@ -8,3 +8,10 @@ build/
 bridge/.token
 __pycache__/
 bridge/bridge.log
+
+# iSH build outputs
+deps/libs/
+deps/include/
+deps/resources/
+deps/.cache/
+deps/aot/.build*/

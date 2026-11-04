@@ -19,3 +19,14 @@ The assistant answers through Claude Code on your PC, so it uses your Claude sub
 3. In the app go to **Settings → Claude Code Bridge**: enter the PC's Tailscale IP (`tailscale ip -4`) and the token, then tap **Save & Test**.
 
 The bridge listens only on the Tailscale address and rejects requests without the token. To start it at login, put a shortcut to `start-bridge.cmd` in `shell:startup`.
+
+## On-device Linux (in progress)
+
+The terminal is moving to a real Alpine Linux shell that runs on the phone, using
+[iSH-ARM64](https://github.com/OpenMinis/ish-arm64) (pinned as the `deps/ish` submodule).
+The build scripts in `deps/` are adapted from [OpenMinis](https://github.com/OpenMinis/OpenMinis).
+`.github/workflows/ish.yml` builds the engine libraries and the root filesystem.
+
+## Licence
+
+GPL-3.0 (see `LICENSE`), because the app includes iSH, which is GPL-licensed.
