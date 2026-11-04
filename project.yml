@@ -27,7 +27,9 @@ targets:
         UIUserInterfaceStyle: Dark
         ITSAppUsesNonExemptEncryption: false
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoadsInWebContent: true
+          # Plain HTTP is needed for the PC bridge (encrypted by Tailscale). This key replaces
+          # NSAllowsArbitraryLoadsInWebContent, which would make iOS ignore it, and also covers the web view.
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.matheesha.aicomputer

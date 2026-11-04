@@ -328,25 +328,21 @@ struct TerminalApp: View {
     }
 }
 
-// MARK: - AI Assistant (sample replies)
+// MARK: - AI Assistant (Claude Code on the user's PC, via the bridge)
 
 struct AssistantApp: View {
-    struct Message: Identifiable { let id = UUID(); var fromUser: Bool; var text: String }
+    struct Message: Identifiable { let id = UUID(); var fromUser: Bool; var text: String; var isError = false }
 
     var initialQuestion: String?
     @State private var messages: [Message] = []
     @State private var input = ""
+    @State private var sessionID: String?
+    @State private var thinking = false
 
     private struct Suggestion: Hashable { var symbol: String; var text: String }
     private let suggestions: [Suggestion] = [
         Suggestion(symbol: "doc.text", text: "Summarize this page"), Suggestion(symbol: "doc.badge.gearshape", text: "Run a Python script"),
         Suggestion(symbol: "doc.text", text: "Create a project plan"), Suggestion(symbol: "magnifyingglass", text: "Search for information"),
-    ]
-    private let replies = [
-        "Summarize this page": "I'd read the page open in Browser and give you the key points in five bullets.",
-        "Run a Python script": "I'd open Terminal, run it in the Python sandbox and show you the output here.",
-        "Create a project plan": "I'd draft the plan as a file in ~/Documents and send the tasks to Claude Code.",
-        "Search for information": "I'd use the Browser MCP server to search the web and cite the sources.",
     ]
 
     var body: some View {
@@ -360,7 +356,8 @@ struct AssistantApp: View {
                             .frame(width: 70, height: 70)
                             .background(Circle().fill(RadialGradient(colors: [Theme.cyan.opacity(0.18), Color(hex: 0x14282C, opacity: 0.4), .clear], center: .center, startRadius: 0, endRadius: 36)))
                         Text("How can I help you today?").font(.system(size: 20, weight: .semibold)).padding(.top, 8)
-                        Text("LFM3-1.7B · on device").font(.system(size: 12)).foregroundStyle(Theme.muted)
+                        Text(Bridge.isSetUp ? "Claude Code · via your PC" : "Not connected · Settings → Claude Code Bridge")
+                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
                     }
                     .padding(.vertical, 18)
 
@@ -385,13 +382,22 @@ struct AssistantApp: View {
                         HStack {
                             if m.fromUser { Spacer(minLength: 40) }
                             VStack(alignment: .leading, spacing: 4) {
-                                if !m.fromUser { Text("LFM3-1.7B · sample reply").font(.system(size: 11.5)).foregroundStyle(Theme.muted) }
-                                Text(m.text).font(.system(size: 14.5))
+                                if !m.fromUser { Text(m.isError ? "Couldn't reach Claude" : "Claude Code").font(.system(size: 11.5)).foregroundStyle(m.isError ? Color(hex: 0xF2B84B) : Theme.muted) }
+                                Text(m.text).font(.system(size: 14.5)).textSelection(.enabled)
                             }
                             .padding(.horizontal, 13).padding(.vertical, 10)
                             .background(RoundedRectangle(cornerRadius: 16).fill(m.fromUser ? Color(hex: 0x1F4A4E) : Theme.surface2))
                             if !m.fromUser { Spacer(minLength: 40) }
                         }
+                    }
+
+                    if thinking {
+                        HStack(spacing: 8) {
+                            ProgressView().tint(Theme.muted)
+                            Text("Claude is thinking on your PC...").font(.system(size: 13)).foregroundStyle(Theme.muted)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 4)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -419,13 +425,20 @@ struct AssistantApp: View {
     }
 
     private func ask(_ raw: String) {
-        let q = raw.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return }
+        let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, !thinking else { return }
         input = ""
         messages.append(Message(fromUser: true, text: q))
-        let reply = replies[q] ?? "This is a design preview, so replies are samples. In the real app, the model or agent you pick answers here."
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            withAnimation { messages.append(Message(fromUser: false, text: reply)) }
+        thinking = true
+        Task { @MainActor in
+            defer { thinking = false }
+            do {
+                let result = try await Bridge.chat(q, sessionID: sessionID)
+                sessionID = result.session_id ?? sessionID
+                withAnimation { messages.append(Message(fromUser: false, text: result.reply)) }
+            } catch {
+                withAnimation { messages.append(Message(fromUser: false, text: error.localizedDescription, isError: true)) }
+            }
         }
     }
 }

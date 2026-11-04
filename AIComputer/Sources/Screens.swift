@@ -411,6 +411,7 @@ struct MCPManagerView: View {
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @State private var darkMode = true
+    @State private var showBridge = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -451,6 +452,8 @@ struct SettingsView: View {
 
                     SectionTitle(text: "AI & Models")
                     Card {
+                        settingRow("desktopcomputer", "Claude Code Bridge", value: Bridge.isSetUp ? "Set up" : "Not set") { showBridge = true }
+                        RowDivider()
                         settingRow("cube", "Model Settings") { state.go(.agents, section: "sec-models") }
                         RowDivider()
                         settingRow("lock", "Provider Keys") { state.go(.agents, section: "sec-providers") }
@@ -488,6 +491,11 @@ struct SettingsView: View {
             }
         }
         .foregroundStyle(Theme.fg)
+        .sheet(isPresented: $showBridge) {
+            BridgeSettingsSheet()
+                .presentationDetents([.large])
+                .presentationBackground(Theme.bg)
+        }
     }
 
     private func settingIcon(_ name: String) -> some View {
@@ -555,5 +563,87 @@ struct AddConnectionSheet: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line2, lineWidth: 1))
         }
+    }
+}
+
+// MARK: - Claude Code bridge settings
+
+struct BridgeSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var address = Bridge.address
+    @State private var token = Bridge.token
+    @State private var status: String?
+    @State private var statusOK = false
+    @State private var checking = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Claude Code Bridge").font(.system(size: 18, weight: .semibold)).padding(.top, 24)
+                Text("The AI Assistant answers through Claude Code on your PC, using your Claude subscription. Your PC must be on, with the bridge running and Tailscale connected on both devices.")
+                    .font(.system(size: 13.5)).foregroundStyle(Theme.fg2)
+
+                field("PC address (Tailscale IP)") {
+                    TextField("", text: $address, prompt: Text("100.x.y.z:8787").foregroundColor(Theme.muted))
+                        .keyboardType(.URL)
+                }
+                field("Token (from bridge/.token on the PC)") {
+                    SecureField("", text: $token, prompt: Text("paste the token").foregroundColor(Theme.muted))
+                }
+
+                if let status {
+                    Label(status, systemImage: statusOK ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(statusOK ? Theme.ok : Color(hex: 0xF2B84B))
+                }
+
+                HStack(spacing: 10) {
+                    sheetButton(checking ? "Checking..." : "Save & Test", filled: true) { Task { await saveAndTest() } }
+                        .disabled(checking)
+                    sheetButton("Done", filled: false) { dismiss() }
+                }
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, 20)
+        }
+        .foregroundStyle(Theme.fg)
+    }
+
+    private func saveAndTest() async {
+        Bridge.address = address
+        Bridge.token = token
+        checking = true
+        defer { checking = false }
+        do {
+            try await Bridge.checkConnection()
+            statusOK = true
+            status = "Connected to your PC"
+        } catch {
+            statusOK = false
+            status = error.localizedDescription
+        }
+    }
+
+    private func field(_ label: String, @ViewBuilder input: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.system(size: 13)).foregroundStyle(Theme.muted)
+            input()
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.bg2))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line2, lineWidth: 1))
+        }
+    }
+
+    private func sheetButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 15.5, weight: .semibold))
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: 14).fill(filled ? AnyShapeStyle(Theme.wideButton) : AnyShapeStyle(Theme.surface2)))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line2, lineWidth: 1))
+        }
+        .buttonStyle(PressStyle())
     }
 }
