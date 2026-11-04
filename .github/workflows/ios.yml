@@ -43,7 +43,7 @@ jobs:
           set -o pipefail
           xcodebuild -project AIComputer.xcodeproj -scheme AIComputer -configuration Debug \
             -destination "id=$UDID" -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
-          test -d build/Build/Products/Debug-iphonesimulator/AIComputer.app
+          test -f build/Build/Products/Debug-iphonesimulator/AIComputer.app/AIComputer || { echo "Build failed:"; grep -E "error:" build.log | head -40; exit 1; }
       - name: Screenshots
         run: |
           mkdir -p shots
@@ -90,7 +90,7 @@ jobs:
             -destination 'generic/platform=iOS' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee ipa.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
-          test -d build/Build/Products/Release-iphoneos/AIComputer.app
+          test -f build/Build/Products/Release-iphoneos/AIComputer.app/AIComputer || { echo "Build failed:"; grep -E "error:" ipa.log | head -40; exit 1; }
       - name: Package .ipa
         run: |
           mkdir Payload

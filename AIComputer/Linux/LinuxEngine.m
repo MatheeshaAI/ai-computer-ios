@@ -11,6 +11,7 @@
 #include "fs/tty.h"
 #include "fs/dev.h"
 #include "fs/devices.h"
+#include "fs/path.h"
 #include "fs/sock.h"
 #include "debug.h"
 
@@ -21,13 +22,16 @@ static LinuxEngine *g_engine;
 static int engine_tty_init(struct tty *tty) { return 0; }
 static void engine_tty_cleanup(struct tty *tty) {}
 
-static int engine_tty_write(struct tty *tty, const void *buf, size_t len, bool blocking) {
-    if (len == 0) return 0;
-    NSData *data = [NSData dataWithBytes:buf length:len];
+static void engine_emit_output(NSData *data) {
     dispatch_async(dispatch_get_main_queue(), ^{
         LinuxOutputHandler handler = g_engine.outputHandler;
         if (handler) handler(data);
     });
+}
+
+static int engine_tty_write(struct tty *tty, const void *buf, size_t len, bool blocking) {
+    if (len == 0) return 0;
+    engine_emit_output([NSData dataWithBytes:buf length:len]);
     return (int) len;
 }
 
@@ -56,11 +60,7 @@ static void engine_handle_die(const char *msg) {
     // The default die() aborts the whole app; log instead and let the guest thread end.
     NSLog(@"LinuxEngine: emulator error: %s", msg);
     NSString *text = [NSString stringWithFormat:@"\r\n[emulator error: %s]\r\n", msg];
-    NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        LinuxOutputHandler handler = g_engine.outputHandler;
-        if (handler) handler(data);
-    });
+    engine_emit_output([text dataUsingEncoding:NSUTF8StringEncoding]);
     pthread_exit(NULL);
 }
 
@@ -174,7 +174,8 @@ static void engine_handle_die(const char *msg) {
 
         err = do_execve(args[0].UTF8String, argc, argvBuf, envp);
         if (err < 0) { NSLog(@"LinuxEngine: do_execve(%@) failed: %d", args[0], err); return; }
-        task_start(current);
+        err = task_start(current);
+        if (err < 0) NSLog(@"LinuxEngine: task_start failed: %d", err);
     });
     return 0;
 }
