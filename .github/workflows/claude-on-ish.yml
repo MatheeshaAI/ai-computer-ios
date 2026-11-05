@@ -1,0 +1,56 @@
+name: Claude Code on iSH (feasibility)
+
+# Runs the same iSH-ARM64 engine and Alpine rootfs the app uses, as a macOS command-line
+# program, and checks whether Claude Code installs and starts inside it (and how slowly).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/claude-on-ish.yml]
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      ISH: deps/ish/build-cli/ish
+      ROOT: deps/resources/alpine-rootfs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build iSH CLI and Alpine rootfs
+        run: |
+          brew install meson ninja llvm lld libarchive
+          export PKG_CONFIG_PATH="$(brew --prefix libarchive)/lib/pkgconfig:$PKG_CONFIG_PATH"
+          (cd deps/ish && git submodule update --init deps/libapps)
+          meson setup deps/ish/build-cli deps/ish --buildtype=release -Dlog="" \
+            -Dkernel=ish -Dengine=asbestos -Dguest_arch=arm64
+          ninja -C deps/ish/build-cli ish
+          bash deps/prepare_alpine_rootfs.sh
+      - name: Boot check
+        run: time $ISH -f $ROOT /bin/sh -c 'uname -a; cat /etc/alpine-release'
+      - name: Install Node.js
+        timeout-minutes: 20
+        run: time $ISH -f $ROOT /bin/sh -c 'apk update && apk add nodejs npm && node --version'
+      - name: Node startup time
+        run: time $ISH -f $ROOT /usr/bin/node -e 'console.log("node ok", process.version)'
+      - name: Install Claude Code (npm)
+        id: npm
+        continue-on-error: true
+        timeout-minutes: 30
+        run: time $ISH -f $ROOT /bin/sh -c 'npm install -g @anthropic-ai/claude-code 2>&1 | tail -20; ls -la $(npm root -g)/@anthropic-ai/claude-code | head -30'
+      - name: Claude Code version (npm)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: time $ISH -f $ROOT /bin/sh -c 'claude --version'
+      - name: Claude Code -p without login (expect an auth error, proves it runs)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: time $ISH -f $ROOT /bin/sh -c 'echo hi | claude -p 2>&1 | tail -5'
+      - name: Install Claude Code (native installer, Alpine)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          time $ISH -f $ROOT /bin/sh -c 'apk add bash curl libgcc libstdc++ ripgrep && curl -fsSL https://claude.ai/install.sh | bash 2>&1 | tail -15'
+          time $ISH -f $ROOT /bin/sh -c 'USE_BUILTIN_RIPGREP=0 /root/.local/bin/claude --version'
